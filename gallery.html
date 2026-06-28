@@ -58,7 +58,7 @@
   <div id="pct">0%</div>
 </div>
 <div id="title">Icons in Stone</div>
-<div id="hint">Drag to look around · Scroll to zoom</div>
+<div id="hint">Drag a statue to spin it · Drag elsewhere to look around · Scroll to zoom</div>
 <div id="debugLog"></div>
 <div id="container"></div>
 
@@ -380,6 +380,8 @@ function updateProgress(){
   pct.textContent = p + '%';
 }
 
+const statueRoots = [];
+
 const FLOAT_GAP = 0.35; // fixed gap between pillar top and the bottom of each statue
 
 function placeStatue(root, x, topY){
@@ -423,7 +425,14 @@ function placeStatue(root, x, topY){
     }
   });
 
-  scene.add(root);
+  // Wrap in a pivot group anchored at the statue's own vertical centerline,
+  // so dragging spins it in place rather than around the world origin.
+  const pivot = new THREE.Group();
+  pivot.position.set(x, 0, 0);
+  root.position.x -= x;
+  pivot.add(root);
+  scene.add(pivot);
+  statueRoots.push(pivot);
 
   // soft glowing disc beneath the floating statue to sell the hover
   const glow = new THREE.Mesh(
@@ -504,6 +513,68 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   labelRenderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+// ---------- Per-statue click-drag rotation ----------
+const raycaster = new THREE.Raycaster();
+const pointerNDC = new THREE.Vector2();
+let draggingStatue = null;
+let lastPointerX = 0;
+const ROTATE_SENSITIVITY = 0.012;
+
+function getPointerPos(e){
+  const rect = renderer.domElement.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: clientX,
+    y: clientY,
+    nx: ((clientX - rect.left) / rect.width) * 2 - 1,
+    ny: -((clientY - rect.top) / rect.height) * 2 + 1,
+  };
+}
+
+function tryStartStatueDrag(e){
+  const p = getPointerPos(e);
+  pointerNDC.set(p.nx, p.ny);
+  raycaster.setFromCamera(pointerNDC, camera);
+  const hits = raycaster.intersectObjects(statueRoots, true);
+  if (hits.length > 0){
+    let obj = hits[0].object;
+    while (obj.parent && !statueRoots.includes(obj)) obj = obj.parent;
+    draggingStatue = obj;
+    lastPointerX = p.x;
+    controls.enabled = false; // hand control to the statue, not the camera
+    return true;
+  }
+  return false;
+}
+
+function onPointerDown(e){
+  if (tryStartStatueDrag(e)){
+    e.preventDefault();
+  }
+}
+function onPointerMove(e){
+  if (!draggingStatue) return;
+  const p = getPointerPos(e);
+  const deltaX = p.x - lastPointerX;
+  lastPointerX = p.x;
+  draggingStatue.rotation.y += deltaX * ROTATE_SENSITIVITY;
+}
+function onPointerUp(){
+  if (draggingStatue){
+    draggingStatue = null;
+    controls.enabled = true;
+  }
+}
+
+renderer.domElement.addEventListener('mousedown', onPointerDown);
+renderer.domElement.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+
+renderer.domElement.addEventListener('touchstart', onPointerDown, { passive: false });
+renderer.domElement.addEventListener('touchmove', onPointerMove, { passive: false });
+window.addEventListener('touchend', onPointerUp);
 
 // ---------- Animate ----------
 function animate(){
