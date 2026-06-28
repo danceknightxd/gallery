@@ -355,16 +355,27 @@ function updateProgress(){
   pct.textContent = p + '%';
 }
 
+const FLOAT_GAP = 0.35; // fixed gap between pillar top and the bottom of each statue
+
 function placeStatue(root, x, topY){
-  // Normalize size & rest on pillar
+  // Normalize size & rest on pillar (then lift by FLOAT_GAP)
+  root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);
   const size = new THREE.Vector3();
   box.getSize(size);
-  const targetHeight = 2.15;
-  const scale = targetHeight / Math.max(size.y, 0.001);
+
+  let targetHeight = 2.15;
+  let scale = targetHeight / Math.max(size.y, 0.0001);
+
+  // guard against degenerate / non-finite bounding boxes from odd exports
+  if (!isFinite(scale) || scale <= 0 || scale > 100000) {
+    console.warn('Unusual bounding box for model at x=', x, size, '— falling back to scale 1');
+    scale = 1;
+  }
   root.scale.setScalar(scale);
 
   // recompute box after scaling
+  root.updateMatrixWorld(true);
   const box2 = new THREE.Box3().setFromObject(root);
   const center = new THREE.Vector3();
   box2.getCenter(center);
@@ -372,19 +383,31 @@ function placeStatue(root, x, topY){
 
   root.position.x += (x - center.x);
   root.position.z += (0 - center.z);
-  root.position.y += (topY - min.y) + 0.001;
+  root.position.y += (topY - min.y) + FLOAT_GAP;
 
   root.traverse(obj => {
     if (obj.isMesh){
       obj.castShadow = true;
       obj.receiveShadow = true;
+      obj.visible = true;
+      obj.frustumCulled = false;
       if (obj.material) {
         obj.material.envMapIntensity = 1.0;
+        obj.material.side = THREE.DoubleSide;
       }
     }
   });
 
   scene.add(root);
+
+  // soft glowing disc beneath the floating statue to sell the hover
+  const glow = new THREE.Mesh(
+    new THREE.CircleGeometry(0.55, 32),
+    new THREE.MeshBasicMaterial({ color: 0xc9a86a, transparent: true, opacity: 0.18 })
+  );
+  glow.rotation.x = -Math.PI/2;
+  glow.position.set(x, topY + 0.02, 0);
+  scene.add(glow);
 }
 
 let loadedCount = 0;
@@ -413,7 +436,11 @@ models.forEach(m => {
     m.url,
     (gltf) => {
       try {
-        placeStatue(gltf.scene, m.x, m.topY);
+        let root = gltf.scene;
+        if (!root || root.children.length === 0) {
+          root = (gltf.scenes && gltf.scenes[0]) ? gltf.scenes[0] : root;
+        }
+        placeStatue(root, m.x, m.topY);
       } catch (e) {
         console.error('Failed to place statue for', m.url, e);
       }
