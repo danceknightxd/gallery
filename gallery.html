@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Icons in Stone — 3D Gallery</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#0a0a0c; font-family: 'Georgia', serif; }
+  #container { width:100vw; height:100vh; display:block; }
+  #loading {
+    position:fixed; inset:0; background:#0a0a0c; color:#e8d9b5;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    z-index:100; letter-spacing:2px; transition: opacity .6s ease;
+  }
+  #loading h1 { font-size: 1.4rem; font-weight:300; margin-bottom: 14px; text-transform:uppercase; }
+  #bar { width: 280px; height: 3px; background:#2a2a2e; }
+  #fill { width:0%; height:100%; background:#c9a86a; transition: width .2s ease; }
+  #pct { margin-top:10px; font-size:0.8rem; color:#8a8276; font-family: monospace; }
+
+  .label {
+    color:#f4ecd8;
+    font-family: 'Georgia', serif;
+    text-align:center;
+    pointer-events:none;
+    user-select:none;
+  }
+  .label .name {
+    font-size: 17px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    font-weight: 600;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(201,168,106,0.35);
+  }
+  .label .sub {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: #c9a86a;
+    margin-top: 2px;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  #hint {
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    color:#9a9486; font-size:11px; letter-spacing:1.5px; text-transform:uppercase;
+    font-family: 'Georgia', serif; opacity:0.7; z-index:10; pointer-events:none;
+  }
+  #title {
+    position:fixed; top:18px; left:50%; transform:translateX(-50%);
+    color:#e8d9b5; font-size:13px; letter-spacing:4px; text-transform:uppercase;
+    font-family: 'Georgia', serif; opacity:0.85; z-index:10; pointer-events:none;
+  }
+</style>
+</head>
+<body>
+<div id="loading">
+  <h1>Entering the Gallery</h1>
+  <div id="bar"><div id="fill"></div></div>
+  <div id="pct">0%</div>
+</div>
+<div id="title">Icons in Stone</div>
+<div id="hint">Drag to look around · Scroll to zoom</div>
+<div id="container"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const container = document.getElementById('container');
+
+// ---------- Renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+// Label renderer (CSS2D)
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0px';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+// ---------- Scene ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0c0c0e);
+scene.fog = new THREE.Fog(0x0c0c0e, 18, 42);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(0, 2.4, 11);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.7, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 4;
+controls.maxDistance = 20;
+controls.maxPolarAngle = Math.PI / 1.95;
+controls.update();
+
+// ---------- Environment (for realistic reflections) ----------
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+// ---------- Floor ----------
+const floorGeo = new THREE.PlaneGeometry(60, 60);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x16151a,
+  roughness: 0.25,
+  metalness: 0.35,
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// subtle floor grid reflection accent rings under pillars
+function addFloorGlow(x){
+  const ringGeo = new THREE.RingGeometry(1.05, 1.9, 64);
+  const ringMat = new THREE.MeshBasicMaterial({ color:0xc9a86a, transparent:true, opacity:0.07 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI/2;
+  ring.position.set(x, 0.01, 0);
+  scene.add(ring);
+}
+
+// ---------- Walls ----------
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x1b1a1f, roughness: 0.85, metalness: 0.05 });
+const backWall = new THREE.Mesh(new THREE.PlaneGeometry(60, 14), wallMat);
+backWall.position.set(0, 7, -14);
+backWall.receiveShadow = true;
+scene.add(backWall);
+
+const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(60, 14), wallMat);
+leftWall.rotation.y = Math.PI/2;
+leftWall.position.set(-18, 7, 0);
+scene.add(leftWall);
+
+const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(60, 14), wallMat);
+rightWall.rotation.y = -Math.PI/2;
+rightWall.position.set(18, 7, 0);
+scene.add(rightWall);
+
+const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshStandardMaterial({color:0x070708, roughness:0.95}));
+ceiling.rotation.x = Math.PI/2;
+ceiling.position.y = 14;
+scene.add(ceiling);
+
+// Decorative wall panel strips (museum look)
+for (let i=-1; i<=1; i++){
+  const panel = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.4, 8.5),
+    new THREE.MeshStandardMaterial({ color:0x232228, roughness:0.6, metalness:0.15 })
+  );
+  panel.position.set(i*6.5, 5.5, -13.85);
+  scene.add(panel);
+}
+
+// ---------- Lighting ----------
+const hemi = new THREE.HemisphereLight(0x9aa3b5, 0x0a0a0c, 0.55);
+scene.add(hemi);
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.18);
+scene.add(ambient);
+
+// Key spotlights for each pillar (warm gallery spots)
+function addSpot(x, color=0xfff1d6, intensity=55){
+  const spot = new THREE.SpotLight(color, intensity, 18, Math.PI/7, 0.35, 1.5);
+  spot.position.set(x, 9.5, 3.5);
+  spot.target.position.set(x, 2.2, 0);
+  spot.castShadow = true;
+  spot.shadow.mapSize.set(1024,1024);
+  spot.shadow.bias = -0.0005;
+  scene.add(spot);
+  scene.add(spot.target);
+
+  // visible light fixture
+  const fixture = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18,0.22,0.35,16),
+    new THREE.MeshStandardMaterial({color:0x111111, metalness:0.8, roughness:0.3})
+  );
+  fixture.position.set(x, 9.7, 3.5);
+  scene.add(fixture);
+}
+[-4.4, 0, 4.4].forEach(x => addSpot(x));
+
+// soft rim light from behind
+const rim = new THREE.DirectionalLight(0x6f7bff, 0.18);
+rim.position.set(0, 8, -10);
+scene.add(rim);
+
+// ---------- Pillars ----------
+const pillarMat = new THREE.MeshStandardMaterial({
+  color: 0xe8e3d8,
+  roughness: 0.35,
+  metalness: 0.05,
+});
+const pillarTopMat = new THREE.MeshStandardMaterial({
+  color: 0xd9d2c2,
+  roughness: 0.3,
+});
+
+function buildPillar(x){
+  const group = new THREE.Group();
+
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.7,0.22,1.7), pillarTopMat);
+  base.position.y = 0.11;
+  base.castShadow = true; base.receiveShadow = true;
+  group.add(base);
+
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.62,1.7,32), pillarMat);
+  shaft.position.y = 0.22 + 0.85;
+  shaft.castShadow = true; shaft.receiveShadow = true;
+  group.add(shaft);
+
+  // fluting detail
+  for (let i=0;i<16;i++){
+    const groove = new THREE.Mesh(new THREE.BoxGeometry(0.04,1.6,0.04), new THREE.MeshStandardMaterial({color:0xcfc8b8, roughness:0.4}));
+    const angle = (i/16)*Math.PI*2;
+    groove.position.set(Math.cos(angle)*0.63, 0.22+0.85, Math.sin(angle)*0.63);
+    group.add(groove);
+  }
+
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.8,0.7,0.18,32), pillarTopMat);
+  cap.position.y = 0.22 + 1.7 + 0.09;
+  cap.castShadow = true; cap.receiveShadow = true;
+  group.add(cap);
+
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.74,0.74,0.05,32), new THREE.MeshStandardMaterial({color:0x2a2a2c, metalness:0.6, roughness:0.4}));
+  plate.position.y = 0.22 + 1.7 + 0.18 + 0.025;
+  group.add(plate);
+
+  group.position.x = x;
+  scene.add(group);
+  addFloorGlow(x);
+
+  // top surface Y where statue feet should sit
+  return 0.22 + 1.7 + 0.18 + 0.05;
+}
+
+const positions = [-4.4, 0, 4.4]; // left to right
+const pillarTopY = positions.map(buildPillar);
+
+// ---------- Nameplates ----------
+function addNamePlate(x, name, sub){
+  const div = document.createElement('div');
+  div.className = 'label';
+  div.innerHTML = `<div class="name">${name}</div><div class="sub">${sub}</div>`;
+  const obj = new CSS2DObject(div);
+  obj.position.set(x, 0.5, 0.95);
+  scene.add(obj);
+}
+addNamePlate(positions[0], 'Kanye West', 'Mixed Media Sculpture');
+addNamePlate(positions[1], 'Kurt Cobain', 'Mixed Media Sculpture');
+addNamePlate(positions[2], 'Chris Brown', 'Mixed Media Sculpture');
+
+// ---------- Load Statues ----------
+const loader = new GLTFLoader();
+const fill = document.getElementById('fill');
+const pct = document.getElementById('pct');
+const loadingScreen = document.getElementById('loading');
+
+const models = [
+  { url: 'models/kanye.glb', x: positions[0], topY: pillarTopY[0] },
+  { url: 'models/kurt.glb',  x: positions[1], topY: pillarTopY[1] },
+  { url: 'models/chris.glb', x: positions[2], topY: pillarTopY[2] },
+];
+
+let totalLoaded = 0;
+const progressPerModel = {};
+
+function updateProgress(){
+  const vals = Object.values(progressPerModel);
+  const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/3 : 0;
+  const p = Math.min(100, Math.round(avg));
+  fill.style.width = p + '%';
+  pct.textContent = p + '%';
+}
+
+function placeStatue(root, x, topY){
+  // Normalize size & rest on pillar
+  const box = new THREE.Box3().setFromObject(root);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const targetHeight = 2.15;
+  const scale = targetHeight / Math.max(size.y, 0.001);
+  root.scale.setScalar(scale);
+
+  // recompute box after scaling
+  const box2 = new THREE.Box3().setFromObject(root);
+  const center = new THREE.Vector3();
+  box2.getCenter(center);
+  const min = box2.min;
+
+  root.position.x += (x - center.x);
+  root.position.z += (0 - center.z);
+  root.position.y += (topY - min.y) + 0.001;
+
+  root.traverse(obj => {
+    if (obj.isMesh){
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      if (obj.material) {
+        obj.material.envMapIntensity = 1.0;
+      }
+    }
+  });
+
+  scene.add(root);
+}
+
+let loadedCount = 0;
+models.forEach(m => {
+  progressPerModel[m.url] = 0;
+  loader.load(
+    m.url,
+    (gltf) => {
+      placeStatue(gltf.scene, m.x, m.topY);
+      progressPerModel[m.url] = 100;
+      updateProgress();
+      loadedCount++;
+      if (loadedCount === models.length){
+        setTimeout(() => {
+          loadingScreen.style.opacity = '0';
+          setTimeout(()=> loadingScreen.style.display='none', 650);
+        }, 350);
+      }
+    },
+    (xhr) => {
+      if (xhr.total){
+        progressPerModel[m.url] = (xhr.loaded/xhr.total)*100;
+        updateProgress();
+      }
+    },
+    (err) => {
+      console.error('Failed to load', m.url, err);
+      progressPerModel[m.url] = 100;
+      updateProgress();
+      loadedCount++;
+    }
+  );
+});
+
+// ---------- Resize ----------
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------- Animate ----------
+function animate(){
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
