@@ -31,14 +31,14 @@
     font-weight: 600;
     text-shadow: 0 2px 10px rgba(0,0,0,0.9), 0 0 18px rgba(201,168,106,0.35);
   }
-  .label .sub {
-    font-size: 10px;
-    letter-spacing: 2px;
-    color: #c9a86a;
-    margin-top: 2px;
-    text-transform: uppercase;
-    opacity: 0.85;
+#debugLog {
+    position:fixed; bottom:0; left:0; right:0; max-height:40vh; overflow-y:auto;
+    background:rgba(0,0,0,0.92); color:#ff6b6b; font-family: monospace; font-size:11px;
+    padding:8px; z-index:200; display:none; white-space:pre-wrap; line-height:1.4;
   }
+  #debugLog.show { display:block; }
+  #debugLog .ok { color:#7ee787; }
+  #debugLog .info { color:#9fb3d1; }
   #hint {
     position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
     color:#9a9486; font-size:11px; letter-spacing:1.5px; text-transform:uppercase;
@@ -59,6 +59,7 @@
 </div>
 <div id="title">Icons in Stone</div>
 <div id="hint">Drag to look around · Scroll to zoom</div>
+<div id="debugLog"></div>
 <div id="container"></div>
 
 <script type="importmap">
@@ -76,6 +77,23 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ---------- On-screen debug log (no devtools needed) ----------
+const debugLog = document.getElementById('debugLog');
+function dbg(msg, cls){
+  debugLog.classList.add('show');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  debugLog.appendChild(line);
+}
+window.addEventListener('error', (e) => {
+  dbg('JS ERROR: ' + (e.message || e) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  dbg('PROMISE ERROR: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+dbg('Script started…', 'info');
 
 const container = document.getElementById('container');
 
@@ -432,16 +450,24 @@ setTimeout(hideLoadingScreen, 20000);
 
 models.forEach(m => {
   progressPerModel[m.url] = 0;
+  dbg('Loading: ' + m.url, 'info');
   loader.load(
     m.url,
     (gltf) => {
+      dbg('✓ Downloaded OK: ' + m.url.split('/').pop(), 'ok');
       try {
         let root = gltf.scene;
         if (!root || root.children.length === 0) {
           root = (gltf.scenes && gltf.scenes[0]) ? gltf.scenes[0] : root;
         }
+        const box = new THREE.Box3().setFromObject(root);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        dbg('  bounding box size: x=' + size.x.toFixed(3) + ' y=' + size.y.toFixed(3) + ' z=' + size.z.toFixed(3));
         placeStatue(root, m.x, m.topY);
+        dbg('  placed on pillar OK', 'ok');
       } catch (e) {
+        dbg('✗ PLACEMENT ERROR for ' + m.url.split('/').pop() + ': ' + e.message);
         console.error('Failed to place statue for', m.url, e);
       }
       progressPerModel[m.url] = 100;
@@ -455,6 +481,7 @@ models.forEach(m => {
       }
     },
     (err) => {
+      dbg('✗ DOWNLOAD FAILED: ' + m.url.split('/').pop() + ' — ' + (err && err.message ? err.message : 'see network tab; likely 404 or CORS'));
       console.error('Failed to load', m.url, err);
       progressPerModel[m.url] = 100;
       updateProgress();
