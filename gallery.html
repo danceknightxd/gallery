@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   html, body { margin:0; padding:0; overflow:hidden; background:#0a0a0c; font-family: 'Georgia', serif; }
-  #container { width:100vw; height:100vh; display:block; }
+  #container { width:100vw; height:100vh; display:block; touch-action:none; }
   #loading {
     position:fixed; inset:0; background:#0a0a0c; color:#e8d9b5;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -75,6 +75,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
@@ -352,6 +353,10 @@ addStoneEngraving(positions[2], 'Chris Brown');
 
 // ---------- Load Statues ----------
 const loader = new GLTFLoader();
+const ktx2Loader = new KTX2Loader();
+ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/');
+ktx2Loader.detectSupport(renderer);
+loader.setKTX2Loader(ktx2Loader);
 const fill = document.getElementById('fill');
 const pct = document.getElementById('pct');
 const loadingScreen = document.getElementById('loading');
