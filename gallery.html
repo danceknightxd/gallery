@@ -258,18 +258,79 @@ function buildPillar(x){
 const positions = [-4.4, 0, 4.4]; // left to right
 const pillarTopY = positions.map(buildPillar);
 
-// ---------- Nameplates ----------
-function addNamePlate(x, name, sub){
-  const div = document.createElement('div');
-  div.className = 'label';
-  div.innerHTML = `<div class="name">${name}</div><div class="sub">${sub}</div>`;
-  const obj = new CSS2DObject(div);
-  obj.position.set(x, 0.5, 0.95);
-  scene.add(obj);
+// ---------- Stone Engravings (carved nameplates on the pillar shaft) ----------
+function makeEngravingTexture(name){
+  const w = 512, h = 160;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+
+  // base stone tone matching pillar
+  ctx.fillStyle = '#e7e2d4';
+  ctx.fillRect(0,0,w,h);
+
+  // subtle stone noise
+  for (let i=0;i<2200;i++){
+    const gx = Math.random()*w, gy = Math.random()*h;
+    const a = Math.random()*0.05;
+    ctx.fillStyle = `rgba(0,0,0,${a})`;
+    ctx.fillRect(gx, gy, 1.4, 1.4);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 64px Georgia, "Times New Roman", serif';
+
+  const cx = w/2, cy = h/2 + 4;
+
+  // carved-in look: dark offset (shadow into stone) + light offset (catching light from above)
+  ctx.fillStyle = 'rgba(20,18,14,0.55)';
+  ctx.fillText(name.toUpperCase(), cx+2, cy+3);
+  ctx.fillStyle = 'rgba(255,250,235,0.65)';
+  ctx.fillText(name.toUpperCase(), cx-1.5, cy-2);
+  ctx.fillStyle = '#3a352c';
+  ctx.fillText(name.toUpperCase(), cx, cy);
+
+  // thin rule lines above/below like a museum plaque
+  ctx.strokeStyle = 'rgba(60,55,45,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, cy-46); ctx.lineTo(w-60, cy-46);
+  ctx.moveTo(60, cy+46); ctx.lineTo(w-60, cy+46);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return tex;
 }
-addNamePlate(positions[0], 'Kanye West', 'Mixed Media Sculpture');
-addNamePlate(positions[1], 'Kurt Cobain', 'Mixed Media Sculpture');
-addNamePlate(positions[2], 'Chris Brown', 'Mixed Media Sculpture');
+
+function addStoneEngraving(x, name){
+  const tex = makeEngravingTexture(name);
+  const plateGeo = new THREE.BoxGeometry(1.5, 0.42, 0.04);
+  const plateMat = new THREE.MeshStandardMaterial({
+    map: tex,
+    color: 0xffffff,
+    roughness: 0.55,
+    metalness: 0.02,
+  });
+  const plate = new THREE.Mesh(plateGeo, plateMat);
+  // mount flush on the front face of the pillar shaft, just below the cap
+  plate.position.set(x, 1.55, 0.665);
+  plate.castShadow = true;
+  plate.receiveShadow = true;
+  scene.add(plate);
+
+  // thin recessed frame to sell the "engraved tablet" look
+  const frameGeo = new THREE.BoxGeometry(1.62, 0.54, 0.015);
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xd3cdbb, roughness: 0.7 });
+  const frame = new THREE.Mesh(frameGeo, frameMat);
+  frame.position.set(x, 1.55, 0.66);
+  scene.add(frame);
+}
+addStoneEngraving(positions[0], 'Kanye West');
+addStoneEngraving(positions[1], 'Kurt Cobain');
+addStoneEngraving(positions[2], 'Chris Brown');
 
 // ---------- Load Statues ----------
 const loader = new GLTFLoader();
@@ -278,9 +339,9 @@ const pct = document.getElementById('pct');
 const loadingScreen = document.getElementById('loading');
 
 const models = [
-  { url: 'models/kanye.glb', x: positions[0], topY: pillarTopY[0] },
-  { url: 'models/kurt.glb',  x: positions[1], topY: pillarTopY[1] },
-  { url: 'models/chris.glb', x: positions[2], topY: pillarTopY[2] },
+  { url: 'https://raw.githubusercontent.com/danceknightxd/kanyew/main/kanye-fast-medium%20(1).glb', x: positions[0], topY: pillarTopY[0] },
+  { url: 'https://raw.githubusercontent.com/danceknightxd/kurt/main/kurt-compressed.glb',           x: positions[1], topY: pillarTopY[1] },
+  { url: 'https://raw.githubusercontent.com/danceknightxd/chris/main/chris-compressed.glb',          x: positions[2], topY: pillarTopY[2] },
 ];
 
 let totalLoaded = 0;
@@ -327,21 +388,38 @@ function placeStatue(root, x, topY){
 }
 
 let loadedCount = 0;
+let screenHidden = false;
+
+function hideLoadingScreen(){
+  if (screenHidden) return;
+  screenHidden = true;
+  loadingScreen.style.opacity = '0';
+  setTimeout(()=> loadingScreen.style.display='none', 650);
+}
+
+function markDone(){
+  loadedCount++;
+  if (loadedCount >= models.length){
+    setTimeout(hideLoadingScreen, 300);
+  }
+}
+
+// Safety net: never leave the visitor staring at a stuck loading screen.
+setTimeout(hideLoadingScreen, 20000);
+
 models.forEach(m => {
   progressPerModel[m.url] = 0;
   loader.load(
     m.url,
     (gltf) => {
-      placeStatue(gltf.scene, m.x, m.topY);
+      try {
+        placeStatue(gltf.scene, m.x, m.topY);
+      } catch (e) {
+        console.error('Failed to place statue for', m.url, e);
+      }
       progressPerModel[m.url] = 100;
       updateProgress();
-      loadedCount++;
-      if (loadedCount === models.length){
-        setTimeout(() => {
-          loadingScreen.style.opacity = '0';
-          setTimeout(()=> loadingScreen.style.display='none', 650);
-        }, 350);
-      }
+      markDone();
     },
     (xhr) => {
       if (xhr.total){
@@ -353,7 +431,7 @@ models.forEach(m => {
       console.error('Failed to load', m.url, err);
       progressPerModel[m.url] = 100;
       updateProgress();
-      loadedCount++;
+      markDone();
     }
   );
 });
