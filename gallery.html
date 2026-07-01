@@ -83,8 +83,11 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 // ---------- On-screen debug log (no devtools needed) ----------
 const debugLog = document.getElementById('debugLog');
 function dbg(msg, cls){
-  // On-screen panel disabled for production — still logs to browser console if needed.
-  console.log(msg);
+  debugLog.classList.add('show');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  debugLog.appendChild(line);
 }
 window.addEventListener('error', (e) => {
   dbg('JS ERROR: ' + (e.message || e) + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : ''));
