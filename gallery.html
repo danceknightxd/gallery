@@ -216,7 +216,7 @@ function addSpot(x, color=0xfff1d6, intensity=55){
   fixture.position.set(x, 9.7, 3.5);
   scene.add(fixture);
 }
-[-4.4, 0, 4.4].forEach(x => addSpot(x));
+[-6.6, -2.2, 2.2, 6.6].forEach(x => addSpot(x));
 
 // soft rim light from behind
 const rim = new THREE.DirectionalLight(0x6f7bff, 0.18);
@@ -272,7 +272,7 @@ function buildPillar(x){
   return 0.22 + 1.7 + 0.18 + 0.05;
 }
 
-const positions = [-4.4, 0, 4.4]; // left to right
+const positions = [-6.6, -2.2, 2.2, 6.6]; // four pillars, evenly spaced, centred
 const pillarTopY = positions.map(buildPillar);
 
 // ---------- Stone Engravings (carved nameplates on the pillar shaft) ----------
@@ -348,6 +348,7 @@ function addStoneEngraving(x, name){
 addStoneEngraving(positions[0], 'Kanye West');
 addStoneEngraving(positions[1], 'Kurt Cobain');
 addStoneEngraving(positions[2], 'Chris Brown');
+addStoneEngraving(positions[3], 'Eminem');
 
 // ---------- Load Statues ----------
 const loader = new GLTFLoader();
@@ -363,7 +364,8 @@ const loadingScreen = document.getElementById('loading');
 const models = [
   { url: 'https://raw.githubusercontent.com/danceknightxd/kanyew/main/kanye-fast-medium%20(1).glb', x: positions[0], topY: pillarTopY[0] },
   { url: 'https://raw.githubusercontent.com/danceknightxd/kurt/main/kurt-compressed.glb',           x: positions[1], topY: pillarTopY[1] },
-  { url: 'https://raw.githubusercontent.com/danceknightxd/chris/main/chris-compressed.glb',          x: positions[2], topY: pillarTopY[2] },
+  { url: 'https://raw.githubusercontent.com/danceknightxd/chris/main/chris-compressed.glb',         x: positions[2], topY: pillarTopY[2] },
+  { url: 'https://raw.githubusercontent.com/danceknightxd/EMINEM1/main/compressed-Meshy_AI_Faceted_Portrait_0701120610_texture.glb', x: positions[3], topY: pillarTopY[3] },
 ];
 
 let totalLoaded = 0;
@@ -371,7 +373,7 @@ const progressPerModel = {};
 
 function updateProgress(){
   const vals = Object.values(progressPerModel);
-  const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/3 : 0;
+  const avg = vals.length ? vals.reduce((a,b)=>a+b,0)/models.length : 0;
   const p = Math.min(100, Math.round(avg));
   fill.style.width = p + '%';
   pct.textContent = p + '%';
@@ -453,8 +455,7 @@ function hideLoadingScreen(){
 
 function markDone(){
   loadedCount++;
-  if (loadedCount >= models.length){
-    setTimeout(hideLoadingScreen, 300);
+  if (loadedCount >= models.length){    setTimeout(hideLoadingScreen, 300);
   }
 }
 
